@@ -40,16 +40,32 @@ public class CrptApi {
     }
 
     public void createDocument(Document document, String signature) {
+        if (!acquireRequestPermit()) {
+            System.err.println("Превышен лимит запросов. Запрос не выполнен.");
+        }
+        else {
+            sendCreateDocumentRequest(document, signature);
+        }
+
+    }
+
+    private boolean acquireRequestPermit() {
         try {
             requestSemaphore.acquire();
-            sendCreateDocumentRequest(document, signature);
+            return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            return false;
         }
     }
 
     private void sendCreateDocumentRequest(Document document, String signature) {
         try {
+            if (!acquireRequestPermit()) {
+                System.err.println("Превышен лимит запросов. Запрос не выполнен.");
+                return;
+            }
+
             String requestBody = objectMapper.writeValueAsString(document);
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -62,17 +78,19 @@ public class CrptApi {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200) {
-                System.out.println("Document created successfully");
+                System.out.println("Документ успешно создан");
             } else {
-                System.err.println("Error creating document. Error code: " + response.statusCode());
+                System.err.println("Ошибка при создании документа. Код ошибки: " + response.statusCode());
             }
         } catch (JsonProcessingException e) {
-            System.err.println("Error when serializing document to JSON: " + e.getMessage());
+            System.err.println("Ошибка при сериализации документа в JSON: " + e.getMessage());
         } catch (Exception e) {
-            System.err.println("An error has occurred: " + e.getMessage());
+            System.err.println("Произошла ошибка: " + e.getMessage());
+        } finally {
+            requestSemaphore.release();
         }
-
     }
+
 
     record Document(
             Description description,
