@@ -10,53 +10,41 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class CrptApi {
-    private final URI AS_URU = URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create");
 
-    private final Lock lock;
-    private final AtomicInteger requestCount;
-    private final int requestLimit;
-    private final Duration timeInterval;
+    private static final URI API_URI = URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create");
+    private final Semaphore requestSemaphore;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final Timer timer;
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
-        this.lock = new ReentrantLock();
-        this.requestCount = new AtomicInteger(0);
-        this.requestLimit = requestLimit;
-        this.timeInterval = Duration.ofSeconds(timeUnit.toSeconds(1));
+        this.requestSemaphore = new Semaphore(requestLimit);
+        this.objectMapper = new ObjectMapper();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
-        this.objectMapper = new ObjectMapper();
+        this.timer = new Timer();
+        long resetInterval = timeUnit.toMillis(1);
+        timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                requestSemaphore.release(requestLimit - requestSemaphore.availablePermits());
+            }
+        }, resetInterval, resetInterval);
     }
 
     public void createDocument(Document document, String signature) {
-        boolean acquired = false;
         try {
-            acquired = lock.tryLock();
-
-            if (acquired) {
-                if (requestCount.get() >= requestLimit) {
-                    lock.lockInterruptibly();
-                }
-            }
-
+            requestSemaphore.acquire();
             sendCreateDocumentRequest(document, signature);
-
-            requestCount.incrementAndGet();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } finally {
-            if (acquired) {
-                scheduleResetRequestCount();
-                lock.unlock();
-            }
         }
     }
 
@@ -65,7 +53,7 @@ public class CrptApi {
             String requestBody = objectMapper.writeValueAsString(document);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(AS_URU)
+                    .uri(API_URI)
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + signature)
@@ -86,21 +74,7 @@ public class CrptApi {
 
     }
 
-    private void scheduleResetRequestCount() {
-        // Планирование сброса счетчика через заданный интервал времени
-        Thread resetThread = new Thread(() -> {
-            try {
-                Thread.sleep(timeInterval.toMillis());
-                requestCount.set(0);
-                lock.unlock();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        resetThread.start();
-    }
-
-    private record Document(
+    record Document(
             Description description,
             String docId,
             String docStatus,
@@ -118,12 +92,12 @@ public class CrptApi {
     ) {
     }
 
-    private record Description(
+    record Description(
             String participantInn
     ) {
     }
 
-    private record Product(
+     record Product(
             String certificateDocument,
             LocalDate certificateDocumentDate,
             String certificateDocumentNumber,
