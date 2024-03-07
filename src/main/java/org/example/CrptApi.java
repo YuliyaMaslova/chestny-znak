@@ -1,7 +1,9 @@
 package org.example;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -21,7 +23,8 @@ public class CrptApi {
     private final Semaphore requestSemaphore;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
-    private final Timer timer;
+    private final TimeUnit timeUnit;
+
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
         this.requestSemaphore = new Semaphore(requestLimit);
@@ -29,42 +32,44 @@ public class CrptApi {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
-        this.timer = new Timer();
-        long resetInterval = timeUnit.toMillis(1);
-        timer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                requestSemaphore.release(requestLimit - requestSemaphore.availablePermits());
-            }
-        }, resetInterval, resetInterval);
+        this.timeUnit = timeUnit;
+
     }
 
     public void createDocument(Document document, String signature) {
-        if (!acquireRequestPermit()) {
-            System.err.println("Превышен лимит запросов. Запрос не выполнен.");
-        }
-        else {
-            sendCreateDocumentRequest(document, signature);
-        }
+        acquireRequestPermit();
+
+        Timer timer = new Timer();//вынести в конструктор
+        long resetInterval = TimeUnit.MILLISECONDS.convert(1, timeUnit);
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                requestSemaphore.release();
+                timer.cancel();
+            }
+        }, resetInterval);
+
+        sendCreateDocumentRequest(document, signature);
+
+        timer.cancel();
+        requestSemaphore.release();
+
 
     }
 
-    private boolean acquireRequestPermit() {
+    private void acquireRequestPermit() {
         try {
             requestSemaphore.acquire();
-            return true;
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return false;
+            throw new  RuntimeException("interrupted");
+
         }
     }
 
     private void sendCreateDocumentRequest(Document document, String signature) {
         try {
-            if (!acquireRequestPermit()) {
-                System.err.println("Превышен лимит запросов. Запрос не выполнен.");
-                return;
-            }
 
             String requestBody = objectMapper.writeValueAsString(document);
 
@@ -92,38 +97,62 @@ public class CrptApi {
     }
 
 
-    record Document(
+    @JsonSerialize
+    public record Document(
+            @JsonProperty("description")
             Description description,
+            @JsonProperty("doc_id")
             String docId,
+            @JsonProperty("doc_status")
             String docStatus,
+            @JsonProperty("doc_type")
             String docType,
             int number,
+
             boolean importRequest,
+            @JsonProperty("owner_inn")
             String ownerInn,
+            @JsonProperty("participant_inn")
             String participantInn,
+            @JsonProperty("producer_inn")
             String producerInn,
+            @JsonProperty("production_date")
             LocalDate productionDate,
+            @JsonProperty("production_type")
             String productionType,
             List<Product> products,
+            @JsonProperty("reg_date")
             LocalDate regDate,
+            @JsonProperty("reg_number")
             String regNumber
     ) {
     }
 
-    record Description(
+    @JsonSerialize
+    public record Description(
             String participantInn
     ) {
     }
 
-     record Product(
+    @JsonSerialize
+    public record Product(
+            @JsonProperty("certificate_document")
             String certificateDocument,
+            @JsonProperty("certificate_document_date")
             LocalDate certificateDocumentDate,
+            @JsonProperty("certificate_document_number")
             String certificateDocumentNumber,
+            @JsonProperty("owner_inn")
             String ownerInn,
+            @JsonProperty("producer_inn")
             String producerInn,
+            @JsonProperty("production_date")
             LocalDate productionDate,
+            @JsonProperty("tnved_code")
             String tnvedCode,
+            @JsonProperty("uit_code")
             String uitCode,
+            @JsonProperty("uitu_code")
             String uituCode
     ) {
     }
