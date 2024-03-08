@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -19,27 +20,28 @@ import java.util.concurrent.TimeUnit;
 
 public class CrptApi {
 
-    private static final URI API_URI = URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create");
+    private static final URI API_URI = URI.create("http://localhost:8081/api/v3/lk/documents/create");
     private final Semaphore requestSemaphore;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final TimeUnit timeUnit;
+    private final Timer timer;
 
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
         this.requestSemaphore = new Semaphore(requestLimit);
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         this.timeUnit = timeUnit;
+        this.timer = new Timer();
 
     }
 
     public void createDocument(Document document, String signature) {
         acquireRequestPermit();
 
-        Timer timer = new Timer();//вынести в конструктор
         long resetInterval = TimeUnit.MILLISECONDS.convert(1, timeUnit);
         timer.schedule(new TimerTask() {
             @Override
@@ -63,7 +65,7 @@ public class CrptApi {
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new  RuntimeException("interrupted");
+            throw new RuntimeException("interrupted");
 
         }
     }
