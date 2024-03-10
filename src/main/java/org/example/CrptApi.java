@@ -47,7 +47,6 @@ public class CrptApi {
             @Override
             public void run() {
                 requestSemaphore.release();
-                timer.cancel();
             }
         }, resetInterval);
 
@@ -61,7 +60,8 @@ public class CrptApi {
 
     private void acquireRequestPermit() {
         try {
-            requestSemaphore.acquire();
+            requestSemaphore.acquire();//используется для ограничения количества одновременных запросов к API
+            // захватывает разрешение у семафора
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
