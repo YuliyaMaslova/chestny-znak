@@ -56,8 +56,7 @@ public class CrptApi {
 
     private void acquireRequestPermit() {
         try {
-            requestSemaphore.acquire();//используется для ограничения количества одновременных запросов к API
-            // захватывает разрешение у семафора
+            requestSemaphore.acquire();
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
