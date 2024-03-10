@@ -29,7 +29,7 @@ public class CrptApi {
 
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
-        this.requestSemaphore = new Semaphore(requestLimit);
+        this.requestSemaphore = new Semaphore(requestLimit, true);
         this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
