@@ -52,10 +52,6 @@ public class CrptApi {
 
         sendCreateDocumentRequest(document, signature);
 
-        timer.cancel();
-        requestSemaphore.release();
-
-
     }
 
     private void acquireRequestPermit() {
@@ -93,8 +89,6 @@ public class CrptApi {
             System.err.println("Ошибка при сериализации документа в JSON: " + e.getMessage());
         } catch (Exception e) {
             System.err.println("Произошла ошибка: " + e.getMessage());
-        } finally {
-            requestSemaphore.release();
         }
     }
 
